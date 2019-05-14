@@ -45,8 +45,7 @@ module FlowControl
 
   class LauncherObject
     def cli_flags
-      o = FlowControl::OptionsObject.new
-      o.get_opts
+      FlowControl::OptionsObject.new.get_opts
     end
 
     def docker_describe(cmd)
