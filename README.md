@@ -10,8 +10,7 @@ Requirements
 
 How to run
 -----------
-MacOS
-++++++
+# MacOS
 
   - clone repo
     ```
@@ -22,8 +21,7 @@ MacOS
     ruby monitor.rb
     ```
 
-Windows
-+++++++
+# Windows
 
   - clone repo
     ```
