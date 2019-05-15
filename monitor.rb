@@ -19,17 +19,17 @@ module FlowControl
         opts.on( '-g', '--grafana-version VERSION', 'Grafana version' ) do |grafana_ver|
         @options[:grafana_ver] = grafana_ver
         end
-    
+
         @options[:prometheus_ver] = nil
         opts.on( '-p', '--prometheus-version VERSION', 'Prometheus version' ) do |prometheus_ver|
           @options[:prometheus_ver] = prometheus_ver
         end
-    
+
         @options[:tsdb_retention] = nil
         opts.on( '-r', '--tsdb-retention TIME', 'Prometheus TSDB retention' ) do |tsdb_retention|
           @options[:tsdb_retention] = tsdb_retention
         end
-    
+
         opts.on( '-h', '--help', 'Display all available options' ) do
           puts opts
           exit
