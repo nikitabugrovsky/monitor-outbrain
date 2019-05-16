@@ -150,7 +150,7 @@ module DockerAPI
     end
 
     def start
-      Docker::Container.get(@container.id).start
+      @container.start
     end
 
     def stop
@@ -174,6 +174,10 @@ end
 executor = Utility::ExecutorObject.new
 logger = Utility::LoggerObject.new
 
+######################################
+### Images
+######################################
+
 existing_images = []
 images = executor.images :all
 images.each do |img|
@@ -191,20 +195,61 @@ settings.each do |k,v|
   logger.info "Image #{image_definition} already exist. Skipping pull." if existing_images.include? image_definition
 end
 
-grafana = {
-  'name' => 'grafana',
-  'Image' => "#{settings[:grafana][:dockerhub_user]}/#{settings[:grafana][:dockerhub_image]}:#{tags[:grafana][:image_version]}",
-  'ExposedPorts' => { '3000/tcp' => {} },
-  'HostConfig' => {
-    'PortBindings' => {
-      '3000/tcp' => [{ 'HostPort' => '3000' }]
+######################
+### Containers
+######################
+prometheus_cmd = [ 
+  "--config.file=/etc/prometheus/prometheus.yml",
+  "--storage.tsdb.path=/prometheus",
+  "--web.console.libraries=/usr/share/prometheus/console_libraries",
+  "--web.console.templates=/usr/share/prometheus/consoles",
+  "--storage.tsdb.retention.time=#{settings[:prometheus][:tsdb_retention]}"
+]
+
+containers = {
+  'grafana' => {
+    'name' => 'grafana',
+    'Image' => "#{settings[:grafana][:dockerhub_user]}/#{settings[:grafana][:dockerhub_image]}:#{tags[:grafana][:image_version]}",
+    'ExposedPorts' => { '3000/tcp' => {} },
+    'HostConfig' => {
+      'PortBindings' => {
+        '3000/tcp' => [{ 'HostPort' => '3000' }]
+      }
+    }
+  },
+  'prometheus' => {
+    'name' => 'prometheus',
+    'Cmd' => prometheus_cmd,
+    'Image' => "#{settings[:prometheus][:dockerhub_user]}/#{settings[:prometheus][:dockerhub_image]}:#{tags[:prometheus][:image_version]}",
+    'ExposedPorts' => { '9090/tcp' => {} },
+    'HostConfig' => {
+      'PortBindings' => {
+        '9090/tcp' => [{ 'HostPort' => '9090' }]
+      }
+    }
+  },
+  'node_exporter' => {
+    'name' => 'node_exporter',
+    'Image' => "#{settings[:node_exporter][:dockerhub_user]}/#{settings[:node_exporter][:dockerhub_image]}:#{tags[:node_exporter][:image_version]}",
+    'ExposedPorts' => { '9100/tcp' => {} },
+    'HostConfig' => {
+      'PortBindings' => {
+        '9100/tcp' => [{ 'HostPort' => '9100' }]
+      }
     }
   }
 }
-grafana_container = executor.container definition: grafana, cmd: :start
-grafana_container.stop
-grafana_container.delete
+containers.each do |container, definition|
+  logger.info "Launching container #{container} from image #{definition['Image']}"
+  grafana_container = executor.container definition: definition, cmd: :start
+  sleep 5
+  logger.info "Stoping container #{container} from image #{definition['Image']}"
+  grafana_container.stop
+  sleep 5
+  logger.info "Deleting container #{container} from image #{definition['Image']}"
+  grafana_container.delete
+end
 
-# %w(version info url).each do |cmd|
-#   logger.info executor.docker cmd
-# end
+#############################
+### Grafana 
+#############################
