@@ -97,9 +97,9 @@ module Utility
       DockerAPI::ImagesBulkObject.new.send cmd
     end
 
-    def container settings, cmd: nil
-      container = DockerAPI::ContainerObject.new settings
-      container.send cmd if cmd 
+    def container definition: nil, cmd: nil
+      container = DockerAPI::ContainerObject.new definition if definition
+      container.send cmd if cmd
     end
   end
 end
@@ -145,17 +145,29 @@ module DockerAPI
   end
 
   class ContainerObject
-    def initialize settings
-      @container = Docker::Container.create settings
+    def initialize definition
+      @container = Docker::Container.create definition
     end
 
-    # def start name
-    #   @container.start @name
-    # end
+    def start
+      Docker::Container.get(@container.id).start
+    end
 
-    # def stop name
-    #   @container.stop @name
-    # end
+    def stop
+      Docker::Container.get(@container.id).stop
+    end
+
+    def delete 
+      Docker::Container.get(@container.id).delete force: true 
+    end
+
+    def describe
+      Docker::Container.get(@container.id).json
+    end
+
+    def get 
+      Docker::Container.get(@container.id)
+    end
   end
 end
 
@@ -176,11 +188,11 @@ settings.each do |k,v|
     logger.info "Downloading #{k.capitalize} image version: #{tags[k][:image_version]} from dockerhub repo: #{v[:dockerhub_user]}/#{v[:dockerhub_image]}"
     executor.image image_definition
   end
-  logger.info "Image #{image_definition} already exist. Skipping pull."
+  logger.info "Image #{image_definition} already exist. Skipping pull." if existing_images.include? image_definition
 end
 
-settings = {
-  'name' => 'grafana-test-api',
+grafana = {
+  'name' => 'grafana',
   'Image' => "#{settings[:grafana][:dockerhub_user]}/#{settings[:grafana][:dockerhub_image]}:#{tags[:grafana][:image_version]}",
   'ExposedPorts' => { '3000/tcp' => {} },
   'HostConfig' => {
@@ -189,8 +201,9 @@ settings = {
     }
   }
 }
-executor.container settings
-
+grafana_container = executor.container definition: grafana, cmd: :start
+grafana_container.stop
+grafana_container.delete
 
 # %w(version info url).each do |cmd|
 #   logger.info executor.docker cmd
