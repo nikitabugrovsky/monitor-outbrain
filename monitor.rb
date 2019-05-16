@@ -19,6 +19,7 @@ module Utility
       dockerhub_image: 'node-exporter'
     }
   }
+  
   class OptionsObject
     require 'optparse'
     def initialize
@@ -171,85 +172,105 @@ module DockerAPI
   end
 end
 
-executor = Utility::ExecutorObject.new
-logger = Utility::LoggerObject.new
+module FlowControl
 
-######################################
-### Images
-######################################
-
-existing_images = []
-images = executor.images :all
-images.each do |img|
-  existing_images << img.info['RepoTags'].first
-end
-
-tags = executor.cli_flags
-settings = Utility::DEFAULTS
-settings.each do |k,v|
-  image_definition = "#{v[:dockerhub_user]}/#{v[:dockerhub_image]}:#{tags[k][:image_version]}"
-  unless existing_images.include? image_definition
-    logger.info "Downloading #{k.capitalize} image version: #{tags[k][:image_version]} from dockerhub repo: #{v[:dockerhub_user]}/#{v[:dockerhub_image]}"
-    executor.image image_definition
-  end
-  logger.info "Image #{image_definition} already exist. Skipping pull." if existing_images.include? image_definition
-end
-
-######################
-### Containers
-######################
-prometheus_cmd = [ 
-  "--config.file=/etc/prometheus/prometheus.yml",
-  "--storage.tsdb.path=/prometheus",
-  "--web.console.libraries=/usr/share/prometheus/console_libraries",
-  "--web.console.templates=/usr/share/prometheus/consoles",
-  "--storage.tsdb.retention.time=#{settings[:prometheus][:tsdb_retention]}"
-]
-
-containers = {
-  'grafana' => {
-    'name' => 'grafana',
-    'Image' => "#{settings[:grafana][:dockerhub_user]}/#{settings[:grafana][:dockerhub_image]}:#{tags[:grafana][:image_version]}",
-    'ExposedPorts' => { '3000/tcp' => {} },
-    'HostConfig' => {
-      'PortBindings' => {
-        '3000/tcp' => [{ 'HostPort' => '3000' }]
-      }
-    }
-  },
-  'prometheus' => {
-    'name' => 'prometheus',
-    'Cmd' => prometheus_cmd,
-    'Image' => "#{settings[:prometheus][:dockerhub_user]}/#{settings[:prometheus][:dockerhub_image]}:#{tags[:prometheus][:image_version]}",
-    'ExposedPorts' => { '9090/tcp' => {} },
-    'HostConfig' => {
-      'PortBindings' => {
-        '9090/tcp' => [{ 'HostPort' => '9090' }]
-      }
-    }
-  },
-  'node_exporter' => {
-    'name' => 'node_exporter',
-    'Image' => "#{settings[:node_exporter][:dockerhub_user]}/#{settings[:node_exporter][:dockerhub_image]}:#{tags[:node_exporter][:image_version]}",
-    'ExposedPorts' => { '9100/tcp' => {} },
-    'HostConfig' => {
-      'PortBindings' => {
-        '9100/tcp' => [{ 'HostPort' => '9100' }]
-      }
-    }
+  PORT_BINDINGS = {
+    prometheus: '9090',
+    grafana: '3000',
+    node_exporter: '9100'
   }
-}
-containers.each do |container, definition|
-  logger.info "Launching container #{container} from image #{definition['Image']}"
-  grafana_container = executor.container definition: definition, cmd: :start
-  sleep 5
-  logger.info "Stoping container #{container} from image #{definition['Image']}"
-  grafana_container.stop
-  sleep 5
-  logger.info "Deleting container #{container} from image #{definition['Image']}"
-  grafana_container.delete
+
+  class ImagesCreator
+    def initialize
+      @executor = Utility::ExecutorObject.new
+      @logger = Utility::LoggerObject.new
+      @existing_images = []
+      collect_images
+      create_images
+    end
+
+    def collect_images
+      images = @executor.images :all
+      images.each do |img|
+        @existing_images << img.info['RepoTags'].first
+      end
+    end
+
+    def settings
+      Utility::DEFAULTS
+    end
+
+    def tags
+      @executor.cli_flags
+    end
+
+    def create_images
+      settings.each do |k,v|
+        image_definition = "#{v[:dockerhub_user]}/#{v[:dockerhub_image]}:#{tags[k][:image_version]}"
+        unless @existing_images.include? image_definition
+          @logger.info "Downloading #{k.capitalize} image version: #{tags[k][:image_version]} from dockerhub repo: #{v[:dockerhub_user]}/#{v[:dockerhub_image]}"
+          @executor.image image_definition
+        end
+        @logger.info "Image #{image_definition} already exist. Skipping pull." if @existing_images.include? image_definition
+      end
+    end
+  end
+
+  class ContainersCreator
+    def initialize
+      @executor = Utility::ExecutorObject.new
+      @logger = Utility::LoggerObject.new
+      deploy_containers
+    end
+
+    def settings
+      Utility::DEFAULTS
+    end
+
+    def tags
+      @executor.cli_flags
+    end
+
+    def prometheus_cmd
+      [
+        "--config.file=/etc/prometheus/prometheus.yml",
+        "--storage.tsdb.path=/prometheus",
+        "--web.console.libraries=/usr/share/prometheus/console_libraries",
+        "--web.console.templates=/usr/share/prometheus/consoles",
+        "--storage.tsdb.retention.time=#{settings[:prometheus][:tsdb_retention]}"
+      ]
+    end
+
+    def container_template name: nil, port: nil, cmd: nil
+      image = "#{settings[name.to_sym][:dockerhub_user]}/#{settings[name.to_sym][:dockerhub_image]}:#{tags[name.to_sym][:image_version]}"
+      tmpl = {
+        name: name,
+        Image: image,
+        ExposedPorts: { "#{port}/tcp" => {} },
+        HostConfig: {
+          PortBindings: {
+            "#{port}/tcp" => [{ 'HostPort' => port.to_s }]
+          }
+        }
+      }
+      tmpl['Cmd'] = cmd if cmd
+      tmpl
+    end
+
+    def deploy_containers
+      PORT_BINDINGS.each do |container, port|
+        image = "#{settings[container.to_sym][:dockerhub_user]}/#{settings[container.to_sym][:dockerhub_image]}:#{tags[container.to_sym][:image_version]}"
+        @logger.info "Launching container #{container} from image #{image}"
+        definition =  if container == 'prometheus'
+                        container_template name: container, port: port, cmd: prometheus_cmd
+                      else
+                        container_template name: container, port: port, cmd: nil
+                      end
+        @executor.container definition: definition, cmd: :start
+      end
+    end
+  end
 end
 
-#############################
-### Grafana 
-#############################
+FlowControl::ImagesCreator.new
+FlowControl::ContainersCreator.new
