@@ -102,6 +102,79 @@ module Utility
       container = DockerAPI::ContainerObject.new definition if definition
       container.send cmd if cmd
     end
+
+    def network(cmd, *args)
+      net = DockerAPI::NetworkObject.new
+      net.send(cmd, *args) if cmd
+    end
+  end
+
+  class ConfigGeneratorObject
+    require 'yaml'
+
+    def initialize file_name, file_ext
+      @logger = Utility::LoggerObject.new
+      config_to_file file_name, file_ext
+    end
+
+    def global interval: '15s', timeout: '10s', eval_int: '15s' 
+      {
+        'scrape_interval' => interval,
+        'scrape_timeout' => timeout,
+        'evaluation_interval' => eval_int
+      }
+    end
+
+    def alerting scheme: 'http', timeout: '10s'
+      { 
+        'alertmanagers' => [
+          { 
+            'static_configs' => [
+              {
+                'targets' => []
+              }
+            ],
+            'scheme' => scheme,
+            'timeout' => timeout
+          }
+        ]
+      }
+    end
+
+    def scrape_config name, target_port 
+      {
+        'job_name' => name,
+        'metrics_path' => '/metrics',
+        'static_configs' => [
+          {
+            'targets' => [
+              "#{name}:#{target_port}"
+            ]
+          }
+        ]
+      }
+    end
+
+    def prometheus_config 
+      {
+        'global' => global,
+        'alerting' => alerting,
+        'scrape_configs' => [
+          scrape_config('prometheus', 9090),
+          scrape_config('node_exporter', 9100)
+        ]
+      }
+    end
+
+    def config_to_yaml
+      prometheus_config.to_yaml
+    end
+
+    def config_to_file file_name, file_ext
+      @logger.info "Writing custom configuration for prometheus to file #{Dir.pwd}/#{file_name}.#{file_ext}"
+      File.open("#{Dir.pwd}/#{file_name}.#{file_ext}", 'w') { |file| file.write(config_to_yaml) }
+    end
+
   end
 end
 
@@ -166,8 +239,33 @@ module DockerAPI
       Docker::Container.get(@container.id).json
     end
 
+    def attach_net    
+    end
+
     def get 
       Docker::Container.get(@container.id)
+    end
+  end
+
+  class NetworkObject
+    def initialize
+      @net = Docker::Network
+    end
+
+    def create name
+      @net.create name
+    end
+
+    def get name
+      Docker::Network.get(name)
+    end
+
+    def delete id
+      Docker::Network.get(id).delete
+    end
+
+    def connect id, container
+      Docker::Network.get(id).connect container
     end
   end
 end
@@ -180,7 +278,15 @@ module FlowControl
     node_exporter: '9100'
   }
 
-  class ImagesCreator
+  class NetworkController
+    def initialize name
+      @executor = Utility::ExecutorObject.new
+      @executor.network :create, name
+    end
+
+  end
+
+  class ImagesController
     def initialize
       @executor = Utility::ExecutorObject.new
       @logger = Utility::LoggerObject.new
@@ -216,7 +322,7 @@ module FlowControl
     end
   end
 
-  class ContainersCreator
+  class ContainersController
     def initialize
       @executor = Utility::ExecutorObject.new
       @logger = Utility::LoggerObject.new
@@ -241,7 +347,7 @@ module FlowControl
       ]
     end
 
-    def container_template name: nil, port: nil, cmd: nil
+    def container_template name: nil, port: nil, cmd: nil, bind: nil
       image = "#{settings[name.to_sym][:dockerhub_user]}/#{settings[name.to_sym][:dockerhub_image]}:#{tags[name.to_sym][:image_version]}"
       tmpl = {
         name: name,
@@ -253,7 +359,8 @@ module FlowControl
           }
         }
       }
-      tmpl['Cmd'] = cmd if cmd
+      tmpl[:Cmd] = cmd if cmd
+      tmpl[:HostConfig][:Binds] = [ bind ] if bind
       tmpl
     end
 
@@ -261,16 +368,22 @@ module FlowControl
       PORT_BINDINGS.each do |container, port|
         image = "#{settings[container.to_sym][:dockerhub_user]}/#{settings[container.to_sym][:dockerhub_image]}:#{tags[container.to_sym][:image_version]}"
         @logger.info "Launching container #{container} from image #{image}"
-        definition =  if container == 'prometheus'
-                        container_template name: container, port: port, cmd: prometheus_cmd
+        definition =  if container == :prometheus
+                        bind_mount = "#{Dir.pwd}/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+                        container_template name: container, port: port, cmd: prometheus_cmd, bind: bind_mount                     
                       else
-                        container_template name: container, port: port, cmd: nil
+                        container_template name: container, port: port, cmd: nil, bind: nil
                       end
-        @executor.container definition: definition, cmd: :start
+        @logger.info "#{container}: #{definition}"
+        cnt = @executor.container definition: definition, cmd: :start
+        net = @executor.network :get, 'prometheus'
+        @executor.network :connect, net.id, cnt.id
       end
     end
   end
 end
 
-FlowControl::ImagesCreator.new
-FlowControl::ContainersCreator.new
+Utility::ConfigGeneratorObject.new('prometheus', 'yml')
+FlowControl::NetworkController.new ('prometheus')
+FlowControl::ImagesController.new
+FlowControl::ContainersController.new
