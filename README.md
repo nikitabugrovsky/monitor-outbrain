@@ -55,7 +55,7 @@ Please write a tool in the language of your choice that will take the following 
   - [x] Node exporter version.
 The script will spin up an monitoring environment which will include the following components:
   - [x] Prometheus server inside a container of the given prometheus version with the specified storage retention and with a job which will scrape it's own prometheus metrics together with node exporter metrics.
-  - [ ] Grafana container with given version which is connected to prometheus    server as a datasource and holds a predefined dashboards
+  - [x] Grafana container with given version which is connected to prometheus    server as a datasource and holds a predefined dashboards
     - [ ] a prometheus server dashboard with few prometheus metrics (please choose any metric you want).
     - [ ] a node exporter dashboard with few node exporter metrics.
   - [x] a container which runs a node exporter and exposing metrics to prom server.
