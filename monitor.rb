@@ -64,7 +64,7 @@
       end
 
       def get_opts
-        @options
+        p @options
       end
     end
 
@@ -331,16 +331,18 @@
 
     class NetworkController
       def initialize name
-        @executor = Utility::ExecutorObject.new
-        @executor.network :create, name
+        executor = Utility::ExecutorObject.new
+        logger = Utility::LoggerObject.new
+        logger.info "Creating docker network: #{name}"
+        logger.info executor.network :create, name
       end
-
     end
 
     class ImagesController
-      def initialize
+      def initialize options
         @executor = Utility::ExecutorObject.new
         @logger = Utility::LoggerObject.new
+        @options = options
         @existing_images = []
         collect_images
         create_images
@@ -357,15 +359,11 @@
         Utility::DEFAULTS
       end
 
-      def tags
-        @executor.cli_flags
-      end
-
       def create_images
         settings.each do |k,v|
-          image_definition = "#{v[:dockerhub_user]}/#{v[:dockerhub_image]}:#{tags[k][:image_version]}"
+          image_definition = "#{v[:dockerhub_user]}/#{v[:dockerhub_image]}:#{@options[k][:image_version]}"
           unless @existing_images.include? image_definition
-            @logger.info "Downloading #{k.capitalize} image version: #{tags[k][:image_version]} from dockerhub repo: #{v[:dockerhub_user]}/#{v[:dockerhub_image]}"
+            @logger.info "Downloading #{k.capitalize} image version: #{@options[k][:image_version]} from dockerhub repo: #{v[:dockerhub_user]}/#{v[:dockerhub_image]}"
             @executor.image image_definition
           end
           @logger.info "Image #{image_definition} already exist. Skipping pull." if @existing_images.include? image_definition
@@ -374,18 +372,15 @@
     end
 
     class ContainersController
-      def initialize
+      def initialize options
         @executor = Utility::ExecutorObject.new
         @logger = Utility::LoggerObject.new
+        @options = options
         deploy_containers
       end
 
       def settings
         Utility::DEFAULTS
-      end
-
-      def tags
-        @executor.cli_flags
       end
 
       def prometheus_cmd
@@ -394,12 +389,12 @@
           "--storage.tsdb.path=/prometheus",
           "--web.console.libraries=/usr/share/prometheus/console_libraries",
           "--web.console.templates=/usr/share/prometheus/consoles",
-          "--storage.tsdb.retention.time=#{settings[:prometheus][:tsdb_retention]}"
+          "--storage.tsdb.retention.time=#{@options[:prometheus][:tsdb_retention]}"
         ]
       end
 
       def container_template name: nil, port: nil, cmd: nil, bind: nil
-        image = "#{settings[name.to_sym][:dockerhub_user]}/#{settings[name.to_sym][:dockerhub_image]}:#{tags[name.to_sym][:image_version]}"
+        image = "#{settings[name.to_sym][:dockerhub_user]}/#{settings[name.to_sym][:dockerhub_image]}:#{@options[name.to_sym][:image_version]}"
         tmpl = {
           name: name,
           Image: image,
@@ -417,7 +412,7 @@
 
       def deploy_containers
         PORT_BINDINGS.each do |container, port|
-          image = "#{settings[container.to_sym][:dockerhub_user]}/#{settings[container.to_sym][:dockerhub_image]}:#{tags[container.to_sym][:image_version]}"
+          image = "#{settings[container.to_sym][:dockerhub_user]}/#{settings[container.to_sym][:dockerhub_image]}:#{@options[container.to_sym][:image_version]}"
           @logger.info "Launching container #{container} from image #{image}"
           definition =  if container == :prometheus
                           bind_mount = "#{Dir.pwd}/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
@@ -444,16 +439,17 @@
       end
 
       def add_datasource name
-        @logger.info "Adding datasource #{name} to Grafana Container"
-        @executor.datasource :add_datasource, name
+        added = @executor.datasource :add_datasource, name
+        @logger.info "Adding datasource #{name} to Grafana Container" if added
       end
     end
   end
 
+  options = Utility::OptionsObject.new.get_opts
+  Utility::ConfigGeneratorObject.new('prometheus', 'yml')
+  FlowControl::NetworkController.new ('prometheus')
+  FlowControl::ImagesController.new(options)
+  FlowControl::ContainersController.new(options)
   grafana = FlowControl::GrafanaController.new
   grafana.add_datasource('prometheus')
-  # Utility::ConfigGeneratorObject.new('prometheus', 'yml')
-  # FlowControl::NetworkController.new ('prometheus')
-  # FlowControl::ImagesController.new
-  # FlowControl::ContainersController.new
 
