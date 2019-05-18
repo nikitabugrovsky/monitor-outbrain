@@ -19,7 +19,7 @@ How to run
     ```
   - start executable
     ```
-    ruby monitor.rb
+    bundle && ruby monitor.rb
     ```
 
 ### Windows
