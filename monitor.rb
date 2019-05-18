@@ -416,7 +416,7 @@
             cmd << "-storage.local.path=/prometheus"
             cmd << "-web.console.libraries=/usr/share/prometheus/console_libraries"
             cmd << "-web.console.templates=/usr/share/prometheus/consoles"
-            cmd << "-storage.local.retention=2h"
+            cmd << "-storage.local.retention=#{@options[:prometheus][:tsdb_retention]}"
           end
           cmd
         end
