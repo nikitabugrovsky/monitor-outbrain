@@ -15,7 +15,7 @@ How to run
 
   - clone repo
     ```
-    git clone https://github.com/nikitabugrovsky/docker-outbrain.git  && cd docker-outbrain
+    git clone https://github.com/nikitabugrovsky/docker-outbrain.git  && cd monitor-outbrain
     ```
   - start executable
     ```
@@ -26,7 +26,7 @@ How to run
 
   - clone repo
     ```
-    git clone https://github.com/nikitabugrovsky/docker-outbrain.git  && cd docker-outbrain
+    git clone https://github.com/nikitabugrovsky/docker-outbrain.git  && cd monitor-outbrain
     ```
   - start executable
     ```
