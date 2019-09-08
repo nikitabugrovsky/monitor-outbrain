@@ -19,7 +19,7 @@
           dockerhub_image: 'node-exporter'
         }
       }
-      
+
       class OptionsObject
         require 'optparse'
         def initialize
@@ -82,11 +82,11 @@
       class ExecutorObject
 
         def docker cmd
-          DockerAPI::DockerInfo.new.send cmd 
+          DockerAPI::DockerInfo.new.send cmd
         end
 
         def image image, cmd: nil
-          img = DockerAPI::ImageObject.new image 
+          img = DockerAPI::ImageObject.new image
           img.send cmd if cmd
         end
 
@@ -123,7 +123,7 @@
           config_to_file file_name, file_ext
         end
 
-        def global interval: '15s', timeout: '10s', eval_int: '15s' 
+        def global interval: '15s', timeout: '10s', eval_int: '15s'
           {
             'scrape_interval' => interval,
             'scrape_timeout' => timeout,
@@ -132,9 +132,9 @@
         end
 
         def alerting scheme: 'http', timeout: '10s'
-          { 
+          {
             'alertmanagers' => [
-              { 
+              {
                 'static_configs' => [
                   {
                     'targets' => []
@@ -147,7 +147,7 @@
           }
         end
 
-        def scrape_config name, target_port 
+        def scrape_config name, target_port
           {
             'job_name' => name,
             'metrics_path' => '/metrics',
@@ -161,7 +161,7 @@
           }
         end
 
-        def prometheus_config 
+        def prometheus_config
           {
             'global' => global,
             'alerting' => alerting,
@@ -237,15 +237,15 @@
           Docker::Container.get(@container.id).stop
         end
 
-        def delete 
-          Docker::Container.get(@container.id).delete force: true 
+        def delete
+          Docker::Container.get(@container.id).delete force: true
         end
 
         def describe
           Docker::Container.get(@container.id).json
         end
 
-        def get 
+        def get
           Docker::Container.get(@container.id)
         end
       end
@@ -296,19 +296,19 @@
 
         def datasource_template name
           {
-            "orgId"=>1, 
-            "name"=>"#{name.capitalize}", 
-            "type"=>"#{name}", 
-            "typeLogoUrl"=>"public/app/plugins/datasource/prometheus/img/prometheus_logo.svg", 
-            "access"=>"proxy", 
-            "url"=>"http://#{name}:9090", 
-            "password"=>"", 
-            "user"=>"", 
-            "database"=>"", 
-            "basicAuth"=>false, 
-            "isDefault"=>true, 
+            "orgId"=>1,
+            "name"=>"#{name.capitalize}",
+            "type"=>"#{name}",
+            "typeLogoUrl"=>"public/app/plugins/datasource/prometheus/img/prometheus_logo.svg",
+            "access"=>"proxy",
+            "url"=>"http://#{name}:9090",
+            "password"=>"",
+            "user"=>"",
+            "database"=>"",
+            "basicAuth"=>false,
+            "isDefault"=>true,
             "jsonData"=>{
-              "httpMethod"=>"GET", 
+              "httpMethod"=>"GET",
               "keepCookies"=>[]
             },
             "readOnly"=>false
@@ -444,7 +444,7 @@
             @logger.info "Launching container #{container} from image #{image}"
             definition =  if container == :prometheus
                             bind_mount = "#{Dir.pwd}/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
-                            container_template name: container, port: port, cmd: prometheus_cmd, bind: bind_mount                     
+                            container_template name: container, port: port, cmd: prometheus_cmd, bind: bind_mount
                           else
                             container_template name: container, port: port, cmd: nil, bind: nil
                           end
@@ -477,7 +477,7 @@
         end
 
         def create_dash name
-          added = @executor.dashboard :create_dash, name 
+          added = @executor.dashboard :create_dash, name
           @logger.info "Adding dashboard to Grafana Container" if added
           @logger.info added
         end
